@@ -59,6 +59,12 @@ router.post('/', protect, async (req, res) => {
   const { campaignId, creatorId, contractAmount, milestones } = req.body;
 
   try {
+    // Prevent duplicate deal rooms for the same campaign and creator
+    const existingDeal = await DealEscrow.findOne({ campaignId, creatorId });
+    if (existingDeal) {
+      return res.status(400).json({ message: 'A deal room has already been established with this creator for this campaign.' });
+    }
+
     const deal = await DealEscrow.create({
       campaignId,
       brandId: req.user._id,

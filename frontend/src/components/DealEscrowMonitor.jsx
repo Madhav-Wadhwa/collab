@@ -197,39 +197,69 @@ export default function DealEscrowMonitor() {
         <h2 className="font-display text-2xl tracking-tight text-white px-2">DEAL ROOM</h2>
         
         <div className="flex-1 overflow-y-auto space-y-2">
-          {deals.map((d) => {
-            const isSelected = selectedDeal && selectedDeal._id === d._id;
-            const partner = user.role === 'brand' ? d.creatorId : d.brandId;
-            return (
-              <div
-                key={d._id}
-                onClick={() => setSelectedDeal(d)}
-                className={`p-4 rounded-2xl border cursor-pointer transition-all ${
-                  isSelected
-                    ? 'bg-white/5 border-white/20'
-                    : 'bg-transparent border-white/5 hover:border-white/10'
-                }`}
-              >
-                <div className="flex justify-between items-start">
-                  <span className="font-display text-xs text-white uppercase truncate">
-                    {partner?.name || 'Partner'}
-                  </span>
-                  <span className="font-label text-[7px] text-white/40">ACTIVE</span>
+          {(() => {
+            // Group deals by unique partner ID to ensure one inbox per partner
+            const uniquePartnersMap = new Map();
+            deals.forEach((d) => {
+              const partner = user.role === 'brand' ? d.creatorId : d.brandId;
+              const partnerId = partner?._id || partner;
+              if (partnerId) {
+                if (!uniquePartnersMap.has(partnerId)) {
+                  uniquePartnersMap.set(partnerId, {
+                    partner,
+                    deals: [],
+                  });
+                }
+                uniquePartnersMap.get(partnerId).deals.push(d);
+              }
+            });
+
+            return Array.from(uniquePartnersMap.values()).map(({ partner, deals: partnerDeals }) => {
+              const partnerId = partner?._id || partner;
+              const isSelected = selectedDeal && partnerDeals.some(d => d._id === selectedDeal._id);
+              const activeDeal = partnerDeals.find(d => selectedDeal && d._id === selectedDeal._id) || partnerDeals[0];
+
+              return (
+                <div
+                  key={partnerId}
+                  onClick={() => setSelectedDeal(activeDeal)}
+                  className={`p-4 rounded-2xl border cursor-pointer transition-all ${
+                    isSelected
+                      ? 'bg-white/5 border-white/20'
+                      : 'bg-transparent border-white/5 hover:border-white/10'
+                  }`}
+                >
+                  <div className="flex justify-between items-start">
+                    <span className="font-display text-xs text-white uppercase truncate max-w-[130px]">
+                      {partner?.name || 'Partner'}
+                    </span>
+                    <span className="font-label text-[7px] text-white/40">
+                      {partnerDeals.length > 1 ? `${partnerDeals.length} CAMPAIGNS` : 'ACTIVE'}
+                    </span>
+                  </div>
+                  
+                  {partner?.creatorProfile?.instagramUsername && (
+                    <p className="font-label text-[8px] text-[#CCFF00] mt-0.5 tracking-wider truncate">
+                      @{partner.creatorProfile.instagramUsername}
+                    </p>
+                  )}
+
+                  <p className="font-label text-[9px] text-white/50 mt-1.5 uppercase truncate">
+                    {activeDeal.campaignId?.title}
+                  </p>
+
+                  <div className="flex justify-between items-center mt-3 pt-2 border-t border-white/5">
+                    <span className="font-label text-[8px] tracking-widest text-[#CCFF00] uppercase">
+                      {activeDeal.status}
+                    </span>
+                    <div className={`w-1.5 h-1.5 rounded-full ${
+                      activeDeal.status === 'Released' ? 'bg-[#CCFF00]' : 'bg-[#FF007A]'
+                    }`} />
+                  </div>
                 </div>
-                <p className="font-label text-[9px] text-white/50 mt-1 uppercase truncate">
-                  {d.campaignId?.title}
-                </p>
-                <div className="flex justify-between items-center mt-3 pt-2 border-t border-white/5">
-                  <span className="font-label text-[8px] tracking-widest text-[#CCFF00] uppercase">
-                    {d.status}
-                  </span>
-                  <div className={`w-1.5 h-1.5 rounded-full ${
-                    d.status === 'Released' ? 'bg-[#CCFF00]' : 'bg-[#FF007A]'
-                  }`} />
-                </div>
-              </div>
-            );
-          })}
+              );
+            });
+          })()}
         </div>
       </section>
 
@@ -239,7 +269,7 @@ export default function DealEscrowMonitor() {
           
           {/* Header */}
           <div className="p-4 border-b border-white/5 bg-[#080809] flex justify-between items-center z-10">
-            <div>
+            <div className="flex flex-col">
               <span className="font-display text-sm tracking-wider text-white uppercase">
                 {opposingUser?.name || 'Partner'}
               </span>
@@ -249,6 +279,40 @@ export default function DealEscrowMonitor() {
                   : 'Verified Enterprise Client'}
               </p>
             </div>
+
+            {/* Campaign switcher for multiple campaign deals with the same creator/partner */}
+            {(() => {
+              const partnerId = opposingUser?._id || opposingUser;
+              const partnerDeals = deals.filter(d => {
+                const p = user.role === 'brand' ? d.creatorId : d.brandId;
+                const pId = p?._id || p;
+                return pId === partnerId;
+              });
+              if (partnerDeals.length > 1) {
+                return (
+                  <div className="flex items-center gap-2 bg-black border border-white/10 rounded-xl px-3 py-1.5 text-white">
+                    <span className="font-label text-[8px] text-white/40 uppercase tracking-widest">Active Campaign:</span>
+                    <select
+                      value={selectedDeal._id}
+                      onChange={(e) => {
+                        const found = partnerDeals.find(pd => pd._id === e.target.value);
+                        if (found) setSelectedDeal(found);
+                      }}
+                      className="bg-transparent border-none text-white font-label text-[8px] tracking-wider uppercase focus:ring-0 focus:outline-none py-0 cursor-pointer"
+                      style={{ colorScheme: 'dark' }}
+                    >
+                      {partnerDeals.map(pd => (
+                        <option key={pd._id} value={pd._id} className="bg-neutral-950 text-white font-label text-[8px] uppercase">
+                          {pd.campaignId?.title || 'Untitled Campaign'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             <div className="flex gap-4 text-white/60">
               <span className="material-symbols-outlined text-sm cursor-pointer hover:text-white transition-colors">videocam</span>
               <span className="material-symbols-outlined text-sm cursor-pointer hover:text-white transition-colors">more_vert</span>

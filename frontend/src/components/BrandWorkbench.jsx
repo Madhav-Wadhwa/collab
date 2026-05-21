@@ -50,6 +50,7 @@ export default function BrandWorkbench() {
   const [campaigns, setCampaigns] = useState([]);
   const [selectedCampaign, setSelectedCampaign] = useState(null);
   const [creators, setCreators] = useState([]);
+  const [deals, setDeals] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Form Fields
@@ -83,6 +84,11 @@ export default function BrandWorkbench() {
       const resCreators = await fetch('/api/auth/creators', { headers });
       const creatorsData = await resCreators.json();
       setCreators(creatorsData);
+
+      // Fetch Brand's Deals
+      const resDeals = await fetch('/api/deals', { headers });
+      const dealsData = await resDeals.json();
+      setDeals(dealsData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -160,9 +166,10 @@ export default function BrandWorkbench() {
       });
 
       if (res.ok) {
+        const newDeal = await res.json();
         setStatusMsg(`Alliance Approved with ${creatorName}! Deal Room established.`);
+        setDeals(prev => [...prev, newDeal]);
         setTimeout(() => setStatusMsg(''), 4000);
-        // Refresh brief lists or deals
       } else {
         const d = await res.json();
         alert(d.message || 'Alliance establish failed');
@@ -177,10 +184,19 @@ export default function BrandWorkbench() {
     setTimeout(() => setStatusMsg(''), 3000);
   };
 
-  // Determine list of applicants: use campaign's applied creators, or fallback to all registered creators for vetting demo
-  const displayApplicants = selectedCampaign && selectedCampaign.appliedCreators && selectedCampaign.appliedCreators.length > 0
+  // Determine list of applicants: use campaign's applied creators, or fallback to all registered creators, then filter out approved ones
+  const displayApplicants = (selectedCampaign && selectedCampaign.appliedCreators && selectedCampaign.appliedCreators.length > 0
     ? creators.filter(c => selectedCampaign.appliedCreators.includes(c._id))
-    : creators;
+    : creators
+  ).filter(c => {
+    if (!selectedCampaign) return true;
+    const hasDeal = deals.some(d => {
+      const dCampaignId = d.campaignId?._id || d.campaignId;
+      const dCreatorId = d.creatorId?._id || d.creatorId;
+      return dCampaignId === selectedCampaign._id && dCreatorId === c._id;
+    });
+    return !hasDeal;
+  });
 
   return (
     <div className="pt-24 pb-20 px-8 max-w-7xl mx-auto space-y-8 bg-black min-h-screen text-white">
