@@ -3,3 +3,4 @@ node_modules/
 backend/.env
 dist/
 build/
+frontend/node_modules/
