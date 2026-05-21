@@ -54,8 +54,29 @@ export default function DealEscrowMonitor() {
     }
   };
 
+  // 1. Socket Lifecycle: Initialize once on mount
   useEffect(() => {
-    if (selectedDeal) {
+    const socketUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? window.location.origin
+      : 'https://collab-uru2.onrender.com';
+    
+    socketRef.current = io(socketUrl);
+
+    socketRef.current.on('receive_deal_message', (message) => {
+      setMessages((prev) => [...prev, message]);
+      scrollToBottom();
+    });
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, []); // Run ONLY once on mount
+
+  // 2. Room & Subscription Lifecycle: Run when selectedDeal changes
+  useEffect(() => {
+    if (selectedDeal && socketRef.current) {
       fetchMessages(selectedDeal._id);
       
       // Setup mock webhooks simulation if barter and shipped
@@ -66,33 +87,17 @@ export default function DealEscrowMonitor() {
       }
 
       // Join socket room
-      if (socketRef.current) {
-        socketRef.current.emit('join_deal_room', { dealId: selectedDeal._id });
-      }
+      socketRef.current.emit('join_deal_room', { dealId: selectedDeal._id });
+
+      // Listen for updates on the selected deal
+      socketRef.current.off('deal_updated');
+      socketRef.current.on('deal_updated', (updatedDeal) => {
+        if (updatedDeal._id === selectedDeal._id) {
+          setSelectedDeal(updatedDeal);
+        }
+        fetchDeals();
+      });
     }
-  }, [selectedDeal]);
-
-  // Sockets Setup
-  useEffect(() => {
-    socketRef.current = io(window.location.origin);
-
-    socketRef.current.on('receive_deal_message', (message) => {
-      setMessages((prev) => [...prev, message]);
-      scrollToBottom();
-    });
-
-    socketRef.current.on('deal_updated', (updatedDeal) => {
-      if (selectedDeal && updatedDeal._id === selectedDeal._id) {
-        setSelectedDeal(updatedDeal);
-      }
-      fetchDeals();
-    });
-
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-    };
   }, [selectedDeal]);
 
   const scrollToBottom = () => {
